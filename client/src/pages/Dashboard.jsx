@@ -5,22 +5,51 @@ import { Card } from '../components/common/Card';
 import { Button } from '../components/common/Button';
 import { Badge } from '../components/common/Badge';
 import { FiPlus, FiAlertCircle, FiClock, FiCheckCircle, FiTrendingUp } from 'react-icons/fi';
+import api from '../services/api';
 
 export const Dashboard = () => {
-  const { complaints } = useComplaints();
   const navigate = useNavigate();
+  const { refreshComplaints, complaints } = useComplaints();
+  
+  const [stats, setStats] = React.useState({
+    total: 0,
+    pending: 0,
+    inProgress: 0,
+    resolved: 0,
+    rejected: 0,
+    byCategory: {
+      "Open Manholes": 0,
+      "Broken/Faulty Street Lights": 0,
+      "Garbage Dumps": 0,
+      "Potholes / Broken Roads": 0
+    }
+  });
+  const [loadingStats, setLoadingStats] = React.useState(true);
 
-  // Statistics Calculation
-  const total = complaints.length;
-  const pending = complaints.filter(c => c.status === 'pending').length;
-  const inProgress = complaints.filter(c => c.status === 'in_progress').length;
-  const resolved = complaints.filter(c => c.status === 'resolved').length;
+  React.useEffect(() => {
+    const loadDashboard = async () => {
+      setLoadingStats(true);
+      try {
+        await refreshComplaints();
+        const response = await api.get('/dashboard/summary');
+        if (response.data && response.data.success) {
+          setStats(response.data.data);
+        }
+      } catch (err) {
+        console.error("Dashboard statistics loading failed", err);
+      } finally {
+        setLoadingStats(false);
+      }
+    };
+    loadDashboard();
+  }, []);
 
-  // Category counts
-  const categoryCounts = complaints.reduce((acc, c) => {
-    acc[c.category] = (acc[c.category] || 0) + 1;
-    return acc;
-  }, {});
+  // Statistics Mapping from backend
+  const total = stats.total;
+  const pending = stats.pending;
+  const inProgress = stats.inProgress;
+  const resolved = stats.resolved;
+  const categoryCounts = stats.byCategory;
 
   const categories = [
     { name: "Open Manholes", color: "bg-purple-500", text: "text-purple-600 dark:text-purple-400" },

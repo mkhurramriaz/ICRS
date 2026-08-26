@@ -33,12 +33,32 @@ export const ReportComplaint = () => {
     "Potholes / Broken Roads"
   ];
 
+  // Geolocation State
+  const [coords, setCoords] = React.useState({ latitude: 33.6844, longitude: 73.0479 }); // Default Islamabad coordinates
+
+  React.useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCoords({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
+        },
+        (error) => {
+          console.warn("Geolocation access denied or failed, using default coordinates.", error);
+        }
+      );
+    }
+  }, []);
+
   const validateForm = () => {
     const newErrors = {};
     if (!title.trim()) newErrors.title = 'Title is required';
     if (!category) newErrors.category = 'Category selection is required';
     if (!location.trim()) newErrors.location = 'Location details are required';
     if (!description.trim()) newErrors.description = 'Issue description is required';
+    if (!imageUrl) newErrors.image = 'Image is required';
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -50,18 +70,25 @@ export const ReportComplaint = () => {
 
     setIsSubmitting(true);
     try {
-      // Simulate Service network roundtrip
-      const submissionData = { title, category, location, description, imageUrl };
-      await ComplaintService.createComplaint(submissionData);
+      // Submit to backend
+      const result = await ComplaintService.createComplaint({
+        title,
+        category,
+        location,
+        description,
+        imageUrl,
+        latitude: coords.latitude,
+        longitude: coords.longitude
+      });
       
-      // Commit to local Context state
-      addComplaint(submissionData);
+      // Commit to local Context state using the returned backend data structure
+      addComplaint(result.data);
       
       // Navigate to complaints listing
       navigate('/complaints');
     } catch (err) {
       console.error("Failed to submit civic issue", err);
-      alert("Submission failed. Please check network configuration.");
+      alert(err.message || "Submission failed. Please check network configuration.");
     } finally {
       setIsSubmitting(false);
     }

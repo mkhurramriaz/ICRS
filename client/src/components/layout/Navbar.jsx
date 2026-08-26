@@ -1,12 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { FiSun, FiMoon, FiMenu, FiBell, FiAlertCircle } from 'react-icons/fi';
-import { Link } from 'react-router-dom';
+import { FiSun, FiMoon, FiMenu, FiBell, FiAlertCircle, FiLogOut } from 'react-icons/fi';
+import { Link, useNavigate } from 'react-router-dom';
 
 export const Navbar = ({ onToggleSidebar }) => {
+  const navigate = useNavigate();
+  const [user, setUser] = useState(null);
   const [darkMode, setDarkMode] = useState(() => {
     return localStorage.getItem('icrs_theme') === 'dark' ||
       (!('icrs_theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
   });
+
+  useEffect(() => {
+    // Load dynamic user info if authenticated
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (e) {
+        console.error('Error parsing stored user details:', e);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (darkMode) {
@@ -17,6 +31,13 @@ export const Navbar = ({ onToggleSidebar }) => {
       localStorage.setItem('icrs_theme', 'light');
     }
   }, [darkMode]);
+
+  const handleLogout = () => {
+    localStorage.removeItem('isAuthenticated');
+    localStorage.removeItem('user');
+    localStorage.removeItem('token');
+    navigate('/', { replace: true });
+  };
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-slate-200/80 bg-white/85 dark:border-slate-800 dark:bg-slate-900/85 backdrop-blur-md transition-colors duration-200 shadow-xs">
@@ -72,19 +93,34 @@ export const Navbar = ({ onToggleSidebar }) => {
             </button>
           </div>
 
-          {/* User profile avatar info */}
-          <div className="flex items-center gap-2 pl-1 border-l border-slate-200 dark:border-slate-800">
-            <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-brand-500 to-emerald-450 p-[1.5px] shadow-sm">
-              <img
-                src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80"
-                alt="Citizen Profile"
-                className="h-full w-full rounded-[10px] object-cover bg-white"
-              />
+          {/* User profile avatar info & Logout button */}
+          <div className="flex items-center gap-3 pl-1 border-l border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-brand-500 to-emerald-450 p-[1.5px] shadow-sm">
+                <img
+                  src={user?.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=150&h=150&q=80"}
+                  alt="Citizen Profile"
+                  className="h-full w-full rounded-[10px] object-cover bg-white"
+                />
+              </div>
+              <div className="hidden flex-col text-left md:flex">
+                <span className="text-xs font-bold leading-none text-slate-800 dark:text-slate-200">
+                  {user?.name || "Khurram Shahzad"}
+                </span>
+                <span className="text-[10px] leading-none text-slate-400 mt-0.5 capitalize">
+                  {user?.role || "Citizen"}
+                </span>
+              </div>
             </div>
-            <div className="hidden flex-col text-left md:flex">
-              <span className="text-xs font-bold leading-none text-slate-800 dark:text-slate-200">Khurram Shahzad</span>
-              <span className="text-[10px] leading-none text-slate-400 mt-0.5">Citizen</span>
-            </div>
+
+            <button
+              onClick={handleLogout}
+              className="rounded-xl p-2.5 text-slate-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/20 active:scale-95 border border-transparent hover:border-red-200/30 transition-all duration-200 cursor-pointer"
+              aria-label="Logout"
+              title="Logout"
+            >
+              <FiLogOut className="h-4.5 w-4.5" />
+            </button>
           </div>
         </div>
       </div>

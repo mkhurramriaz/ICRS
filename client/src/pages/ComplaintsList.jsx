@@ -7,10 +7,14 @@ import { Card } from '../components/common/Card';
 import { FiSearch, FiSliders, FiInbox, FiRefreshCw } from 'react-icons/fi';
 
 export const ComplaintsList = () => {
-  const { complaints } = useComplaints();
+  const { complaints, refreshComplaints } = useComplaints();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+
+  React.useEffect(() => {
+    refreshComplaints();
+  }, []);
 
   // Categories list for dropdown
   const categoriesList = [

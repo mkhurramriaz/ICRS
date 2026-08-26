@@ -1,51 +1,101 @@
-// Simulated delay to test loading states and skeleton screen effects
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+import api from './api';
+
+/**
+ * Converts a base64 DataURL string to a standard File object.
+ */
+const dataURLtoFile = (dataurl, filename) => {
+  try {
+    const arr = dataurl.split(',');
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8arr = new Uint8Array(n);
+    while (n--) {
+      u8arr[n] = bstr.charCodeAt(n);
+    }
+    return new File([u8arr], filename, { type: mime });
+  } catch (error) {
+    console.error('Error converting base64 data to File object:', error);
+    return null;
+  }
+};
 
 export const ComplaintService = {
   /**
-   * Fetches all complaints from the local state storage.
+   * Fetches all complaints from the backend database.
    */
   async getComplaints() {
-    await delay(800);
-    const saved = localStorage.getItem('icrs_complaints');
-    if (saved) {
-      return JSON.parse(saved);
+    try {
+      const response = await api.get('/complaints');
+      return response.data.data; // Array of serialized complaints
+    } catch (error) {
+      console.error('Error getting complaints feed:', error);
+      return [];
     }
-    return [];
   },
 
   /**
    * Fetches a single complaint by its unique identifier.
    */
   async getComplaintById(id) {
-    await delay(400);
-    const saved = localStorage.getItem('icrs_complaints');
-    if (saved) {
-      const complaints = JSON.parse(saved);
-      return complaints.find((c) => c.id === id) || null;
+    try {
+      const response = await api.get(`/complaints/${id}`);
+      return response.data.data;
+    } catch (error) {
+      console.error(`Error getting complaint ${id}:`, error);
+      return null;
     }
-    return null;
   },
 
   /**
-   * Simulates sending complaint details to the server.
+   * Sends complaint details to the server (supports multipart image uploads).
    */
   async createComplaint(complaintData) {
-    await delay(1200);
-    // When the Express backend is ready, this will be:
-    // const response = await axios.post('/api/complaints', complaintData);
-    // return response.data;
-    return { success: true, data: complaintData };
+    try {
+      const formData = new FormData();
+      formData.append('title', complaintData.title);
+      formData.append('description', complaintData.description);
+      formData.append('category', complaintData.category);
+      formData.append('location', complaintData.location);
+      
+      // Send coordinate values
+      formData.append('latitude', complaintData.latitude || 33.6844);
+      formData.append('longitude', complaintData.longitude || 73.0479);
+
+      if (complaintData.imageUrl) {
+        if (complaintData.imageUrl.startsWith('data:image/')) {
+          // Convert base64 DataURL back to a File
+          const file = dataURLtoFile(complaintData.imageUrl, 'complaint-image.jpg');
+          if (file) {
+            formData.append('image', file);
+          }
+        } else {
+          formData.append('image', complaintData.imageUrl);
+        }
+      }
+
+      const response = await api.post('/complaints', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      return response.data; // { success: true, data: ... }
+    } catch (error) {
+      const errorMsg = error.response?.data?.errors?.[0] || error.response?.data?.message || 'Failed to submit complaint.';
+      throw new Error(errorMsg);
+    }
   },
 
   /**
-   * Simulates updating the status of a civic report.
+   * Updates the status of a civic report.
    */
   async updateComplaintStatus(id, status) {
-    await delay(600);
-    // When the Express backend is ready, this will be:
-    // const response = await axios.patch(`/api/complaints/${id}`, { status });
-    // return response.data;
-    return { success: true, id, status };
+    try {
+      const response = await api.patch(`/complaints/${id}/status`, { status });
+      return response.data; // { success: true, data: ... }
+    } catch (error) {
+      const errorMsg = error.response?.data?.errors?.[0] || error.response?.data?.message || 'Failed to update status.';
+      throw new Error(errorMsg);
+    }
   }
 };
