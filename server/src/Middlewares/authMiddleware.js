@@ -72,7 +72,10 @@ const requireRole = (...roles) => {
       });
     }
 
-    if (!roles.includes(req.user.role)) {
+    const userRole = (req.user.role || '').toUpperCase();
+    const allowedRoles = roles.map(r => r.toUpperCase());
+
+    if (!allowedRoles.includes(userRole)) {
       return res.status(403).json({
         success: false,
         message: `Access Denied: Unauthorized access level. Requires one of: ${roles.join(', ')}`

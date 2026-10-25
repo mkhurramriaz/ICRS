@@ -84,7 +84,7 @@ const complaintSchema = new mongoose.Schema(
       analyzedAt: { type: Date, default: null }
     },
     duplicate: {
-      isDuplicate: { type: Boolean, default: null },
+      isDuplicate: { type: Boolean, default: false },
       masterComplaintId: { type: mongoose.Schema.Types.ObjectId, ref: 'Complaint', default: null },
       similarityScore: { type: Number, default: null },
       distanceMeters: { type: Number, default: null }

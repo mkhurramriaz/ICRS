@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiMail, FiLock, FiUser, FiArrowRight, FiAlertCircle } from 'react-icons/fi';
+import { FiMail, FiLock, FiUser, FiArrowRight, FiAlertCircle, FiShield, FiBriefcase } from 'react-icons/fi';
 import { AuthService } from '../services/AuthService';
 
 export const Auth = () => {
@@ -10,6 +10,9 @@ export const Auth = () => {
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [role, setRole] = useState('CITIZEN');
+  const [departmentId, setDepartmentId] = useState('');
+  const [departments, setDepartments] = useState([]);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -19,6 +22,19 @@ export const Auth = () => {
       navigate('/dashboard', { replace: true });
     }
   }, [navigate]);
+
+  // Fetch active departments for STAFF signup
+  useEffect(() => {
+    const fetchDepts = async () => {
+      try {
+        const depts = await AuthService.getDepartments();
+        setDepartments(depts);
+      } catch (err) {
+        console.error('Error fetching departments list:', err);
+      }
+    };
+    fetchDepts();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -39,6 +55,10 @@ export const Auth = () => {
         setError('Passwords do not match.');
         return;
       }
+      if (role === 'STAFF' && !departmentId) {
+        setError('Please select an assigned municipal department for STAFF registration.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -54,12 +74,21 @@ export const Auth = () => {
         // Navigate to the main dashboard layout
         navigate('/dashboard');
       } else {
-        // Register using the service
-        const response = await AuthService.register(name, email, password);
+        // Register using the service with selected role and department
+        const response = await AuthService.register(
+          name,
+          email,
+          password,
+          role,
+          role === 'STAFF' ? departmentId : null
+        );
         if (response.success) {
           // Log in automatically after registration
           localStorage.setItem('isAuthenticated', 'true');
           localStorage.setItem('user', JSON.stringify(response.user));
+          if (response.token) {
+            localStorage.setItem('token', response.token);
+          }
           navigate('/dashboard');
         }
       }
@@ -85,7 +114,7 @@ export const Auth = () => {
           <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-500 text-white shadow-lg shadow-brand-500/25 mb-4 animate-bounce">
             <span className="text-xl font-black tracking-tighter">IC</span>
           </div>
-          <h2 className="text-2xl font-black tracking-tight text-slate-800 dark:text-white">
+          <h2 className="text-2xl font-black tracking-tight text-slate-850 dark:text-white">
             {isLogin ? 'Welcome Back to ICRS' : 'Create an Account'}
           </h2>
           <p className="text-sm text-slate-505 dark:text-slate-400 mt-1.5 leading-relaxed">
@@ -125,6 +154,62 @@ export const Auth = () => {
                   onChange={(e) => setName(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 text-sm rounded-xl border border-slate-200/80 bg-white/60 focus:border-brand-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-900/50 dark:focus:border-brand-500 dark:text-white transition-all duration-200"
                 />
+              </div>
+            </div>
+          )}
+
+          {/* Role Selection (Signup Mode Only) */}
+          {!isLogin && (
+            <div className="space-y-1">
+              <label htmlFor="role" className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                Account Role
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 dark:text-slate-550">
+                  <FiShield className="h-4 w-4" />
+                </div>
+                <select
+                  id="role"
+                  value={role}
+                  onChange={(e) => {
+                    setRole(e.target.value);
+                    if (e.target.value !== 'STAFF') {
+                      setDepartmentId('');
+                    }
+                  }}
+                  className="w-full pl-10 pr-4 py-3 text-sm rounded-xl border border-slate-200/80 bg-white/60 focus:border-brand-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-900 dark:focus:border-brand-500 dark:text-white transition-all duration-200 cursor-pointer"
+                >
+                  <option value="CITIZEN">Citizen</option>
+                  <option value="STAFF">Municipal Staff</option>
+                  <option value="ADMIN">System Administrator</option>
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Department Selection (Signup Mode Only - For STAFF only) */}
+          {!isLogin && role === 'STAFF' && (
+            <div className="space-y-1 animate-in fade-in slide-in-from-top-2 duration-200">
+              <label htmlFor="departmentId" className="text-xs font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">
+                Assigned Department <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400 dark:text-slate-550">
+                  <FiBriefcase className="h-4 w-4" />
+                </div>
+                <select
+                  id="departmentId"
+                  value={departmentId}
+                  onChange={(e) => setDepartmentId(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 text-sm rounded-xl border border-slate-200/80 bg-white/60 focus:border-brand-500 focus:bg-white focus:outline-none dark:border-slate-800 dark:bg-slate-900 dark:focus:border-brand-500 dark:text-white transition-all duration-200 cursor-pointer"
+                >
+                  <option value="">-- Select Municipal Department --</option>
+                  {departments.map((dept) => (
+                    <option key={dept._id} value={dept._id}>
+                      {dept.name}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
           )}

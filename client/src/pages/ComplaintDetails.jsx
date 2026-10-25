@@ -35,6 +35,17 @@ export const ComplaintDetails = () => {
     fetchDetails();
   }, [id, getComplaintById]);
 
+  // Current user role
+  const currentUser = React.useMemo(() => {
+    try {
+      const stored = localStorage.getItem('user');
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+  const isAuthority = currentUser?.role?.toUpperCase() === 'STAFF' || currentUser?.role?.toUpperCase() === 'ADMIN';
+
   const handleStatusChange = async (newStatus) => {
     setUpdatingStatus(true);
     try {
@@ -46,7 +57,7 @@ export const ComplaintDetails = () => {
       setComplaint((prev) => ({ ...prev, status: newStatus }));
     } catch (e) {
       console.error(e);
-      alert("Failed to update status.");
+      alert("Failed to update status: " + (e.message || "Unauthorized or network error."));
     } finally {
       setUpdatingStatus(false);
     }
@@ -76,6 +87,7 @@ export const ComplaintDetails = () => {
       case 'pending': return <Badge variant="warning">Pending Review</Badge>;
       case 'in_progress': return <Badge variant="info">In Progress</Badge>;
       case 'resolved': return <Badge variant="success">Resolved</Badge>;
+      case 'rejected': return <Badge variant="danger">Rejected</Badge>;
       default: return <Badge variant="slate">{statusVal}</Badge>;
     }
   };
@@ -111,6 +123,11 @@ export const ComplaintDetails = () => {
             <Badge variant={getCategoryColor(complaint.category)} size="sm" className="font-bold">
               {complaint.category}
             </Badge>
+            {complaint.isDuplicate && (
+              <Badge variant="warning" size="sm" className="font-bold">
+                Nearby Duplicate {complaint.distanceMeters ? `(${complaint.distanceMeters}m away)` : ''}
+              </Badge>
+            )}
           </div>
           <h1 className="text-xl sm:text-2xl font-black text-slate-850 dark:text-white leading-tight">
             {complaint.title}
@@ -152,6 +169,11 @@ export const ComplaintDetails = () => {
               <div>
                 <span className="font-extrabold text-slate-700 dark:text-slate-300">Reported Location Address</span>
                 <p className="text-slate-600 dark:text-slate-400 mt-1 leading-relaxed">{complaint.location}</p>
+                {complaint.latitude && complaint.longitude && (
+                  <p className="text-[11px] text-slate-400 dark:text-slate-500 font-mono mt-0.5">
+                    GPS Coordinates: {Number(complaint.latitude).toFixed(4)}°, {Number(complaint.longitude).toFixed(4)}°
+                  </p>
+                )}
               </div>
             </div>
 
@@ -167,53 +189,70 @@ export const ComplaintDetails = () => {
 
         {/* Right Side: Authority resolution + CV Panel */}
         <div className="space-y-6">
-          {/* Authority Simulation Card */}
-          <Card
-            title="Municipal Authority Panel"
-            subtitle="Simulate resolution workflow (Admin)"
-          >
-            <div className="space-y-4">
-              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                As a local admin, update the status of this ticket to initiate field works or resolve the case:
-              </p>
+          {/* Authority Resolution or Citizen Status Tracker Card */}
+          {isAuthority ? (
+            <Card
+              title="Municipal Authority Panel"
+              subtitle={`Manage ticket workflow (${currentUser?.role})`}
+            >
+              <div className="space-y-4">
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Update the status of this ticket to initiate field works or resolve the case:
+                </p>
 
-              <div className="flex flex-col gap-2.5">
-                <Button
-                  variant={complaint.status === 'pending' ? 'primary' : 'outline'}
-                  size="sm"
-                  isLoading={updatingStatus && complaint.status === 'pending'}
-                  disabled={updatingStatus}
-                  onClick={() => handleStatusChange('pending')}
-                  icon={FiClock}
-                  className="font-bold py-2.5 justify-start text-xs border-slate-205 dark:border-slate-800"
-                >
-                  Set as Pending Review
-                </Button>
-                <Button
-                  variant={complaint.status === 'in_progress' ? 'primary' : 'outline'}
-                  size="sm"
-                  isLoading={updatingStatus && complaint.status === 'in_progress'}
-                  disabled={updatingStatus}
-                  onClick={() => handleStatusChange('in_progress')}
-                  icon={FiTool}
-                  className="font-bold py-2.5 justify-start text-xs border-slate-205 dark:border-slate-800"
-                >
-                  Set as In Progress
-                </Button>
-                <Button
-                  variant={complaint.status === 'resolved' ? 'primary' : 'outline'}
-                  size="sm"
-                  isLoading={updatingStatus && complaint.status === 'resolved'}
-                  disabled={updatingStatus}
-                  onClick={() => handleStatusChange('resolved')}
-                  icon={FiCheckCircle}
-                  className="font-bold py-2.5 justify-start text-xs border-slate-205 dark:border-slate-800"
-                >
-                  Set as Resolved / Fixed
-                </Button>
+                <div className="flex flex-col gap-2.5">
+                  <Button
+                    variant={complaint.status === 'pending' ? 'primary' : 'outline'}
+                    size="sm"
+                    isLoading={updatingStatus && complaint.status === 'pending'}
+                    disabled={updatingStatus}
+                    onClick={() => handleStatusChange('pending')}
+                    icon={FiClock}
+                    className="font-bold py-2.5 justify-start text-xs border-slate-205 dark:border-slate-800"
+                  >
+                    Set as Pending Review
+                  </Button>
+                  <Button
+                    variant={complaint.status === 'in_progress' ? 'primary' : 'outline'}
+                    size="sm"
+                    isLoading={updatingStatus && complaint.status === 'in_progress'}
+                    disabled={updatingStatus}
+                    onClick={() => handleStatusChange('in_progress')}
+                    icon={FiTool}
+                    className="font-bold py-2.5 justify-start text-xs border-slate-205 dark:border-slate-800"
+                  >
+                    Set as In Progress
+                  </Button>
+                  <Button
+                    variant={complaint.status === 'resolved' ? 'primary' : 'outline'}
+                    size="sm"
+                    isLoading={updatingStatus && complaint.status === 'resolved'}
+                    disabled={updatingStatus}
+                    onClick={() => handleStatusChange('resolved')}
+                    icon={FiCheckCircle}
+                    className="font-bold py-2.5 justify-start text-xs border-slate-205 dark:border-slate-800"
+                  >
+                    Set as Resolved / Fixed
+                  </Button>
+                </div>
               </div>
-            </div>
-          </Card>
+            </Card>
+          ) : (
+            <Card
+              title="Civic Status Tracker"
+              subtitle="Real-time issue monitoring"
+            >
+              <div className="space-y-3 text-xs">
+                <div className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800">
+                  <span className="font-semibold text-slate-600 dark:text-slate-400">Current Status</span>
+                  {getStatusBadge(complaint.status)}
+                </div>
+                <p className="text-slate-500 dark:text-slate-400 leading-relaxed text-[11px]">
+                  Municipal department staff will review this ticket, assign repair crews, and update the resolution status. You will see live updates here.
+                </p>
+              </div>
+            </Card>
+          )}
 
           {/* AI Computer Vision Details Panel */}
           <Card

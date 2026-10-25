@@ -54,7 +54,14 @@ export const ComplaintCard = ({ complaint }) => {
       {/* Info details panel */}
       <div className="flex flex-col flex-1 p-5 gap-3.5">
         <div className="space-y-1">
-          <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{id}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">{id}</span>
+            {complaint.isDuplicate && (
+              <span className="text-[9px] font-bold text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200/60 dark:border-amber-900/40">
+                Nearby Duplicate
+              </span>
+            )}
+          </div>
           <h4 className="text-base font-extrabold text-slate-850 dark:text-slate-100 leading-snug line-clamp-1">
             {title}
           </h4>

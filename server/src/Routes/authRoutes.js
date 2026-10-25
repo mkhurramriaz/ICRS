@@ -9,7 +9,12 @@ const router = express.Router();
 const registerValidation = [
   body('name').notEmpty().withMessage('Full name is required').trim(),
   body('email').isEmail().withMessage('Must be a valid email address').normalizeEmail(),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long')
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
+  body('role')
+    .optional()
+    .customSanitizer(val => typeof val === 'string' ? val.toUpperCase() : val)
+    .isIn(['CITIZEN', 'STAFF', 'ADMIN'])
+    .withMessage('Role must be CITIZEN, STAFF, or ADMIN')
 ];
 
 const loginValidation = [

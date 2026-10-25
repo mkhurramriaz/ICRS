@@ -1,4 +1,6 @@
 const User = require('../Models/User');
+const Department = require('../Models/Department');
+const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const { validationResult } = require('express-validator');
@@ -18,15 +20,17 @@ const generateToken = (userId, role) => {
  */
 const mapUserToFrontend = (user) => {
   return {
+    id: user._id ? user._id.toString() : undefined,
     name: user.name,
     email: user.email,
     role: user.role.toLowerCase(),
-    avatarUrl: user.avatarUrl
+    avatarUrl: user.avatarUrl,
+    departmentId: user.departmentId ? user.departmentId.toString() : null
   };
 };
 
 /**
- * Register a new citizen
+ * Register a new user (CITIZEN, STAFF, or ADMIN)
  * POST /api/auth/register
  */
 const register = async (req, res, next) => {
@@ -41,6 +45,15 @@ const register = async (req, res, next) => {
     }
 
     const { name, email, password } = req.body;
+    const role = (req.body.role || 'CITIZEN').toUpperCase();
+
+    if (!['CITIZEN', 'STAFF', 'ADMIN'].includes(role)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Registration validation failed',
+        errors: ['Invalid role. Must be CITIZEN, STAFF, or ADMIN.']
+      });
+    }
 
     // Check if email already registered
     const existingUser = await User.findOne({ email });
@@ -52,16 +65,50 @@ const register = async (req, res, next) => {
       });
     }
 
+    let resolvedDepartmentId = null;
+
+    // Validate department assignment
+    if (role === 'STAFF') {
+      const { departmentId } = req.body;
+      if (!departmentId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Registration validation failed',
+          errors: ['Department is required for STAFF registration.']
+        });
+      }
+
+      if (!mongoose.Types.ObjectId.isValid(departmentId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Registration validation failed',
+          errors: ['Invalid department ID format.']
+        });
+      }
+
+      const dept = await Department.findOne({ _id: departmentId, isActive: true });
+      if (!dept) {
+        return res.status(400).json({
+          success: false,
+          message: 'Registration validation failed',
+          errors: ['Selected department does not exist or is inactive.']
+        });
+      }
+
+      resolvedDepartmentId = dept._id;
+    }
+
     // Hash password
     const salt = await bcrypt.genSalt(10);
     const passwordHash = await bcrypt.hash(password, salt);
 
-    // Create the User (always CITIZEN for public registration)
+    // Create the User
     const user = new User({
       name,
       email,
       passwordHash,
-      role: 'CITIZEN'
+      role,
+      departmentId: resolvedDepartmentId
     });
 
     await user.save();
@@ -70,7 +117,7 @@ const register = async (req, res, next) => {
 
     return res.status(201).json({
       success: true,
-      message: 'Citizen registered successfully',
+      message: `${role.charAt(0) + role.slice(1).toLowerCase()} registered successfully`,
       token,
       user: mapUserToFrontend(user)
     });

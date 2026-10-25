@@ -13,44 +13,73 @@ const errorMiddleware = require('./Middlewares/errorMiddleware');
 const authRoutes = require('./Routes/authRoutes');
 const complaintRoutes = require('./Routes/complaintRoutes');
 const dashboardRoutes = require('./Routes/dashboardRoutes');
+const departmentRoutes = require('./Routes/departmentRoutes');
 
 const Department = require('./Models/Department');
 
 const app = express();
 
-// Seed Default Departments (runs after DB is connected)
+// Define the 4 exact required municipal departments
+const REQUIRED_DEPARTMENTS = [
+  {
+    name: 'Manhole & Drainage Department',
+    code: 'MANHOLE_DRAINAGE',
+    issueTypes: ['OPEN_MANHOLE'],
+    isActive: true
+  },
+  {
+    name: 'Solid Waste Management Department',
+    code: 'SOLID_WASTE',
+    issueTypes: ['GARBAGE_DUMP'],
+    isActive: true
+  },
+  {
+    name: 'Street Lighting Department',
+    code: 'STREET_LIGHTING',
+    issueTypes: ['BROKEN_STREET_LIGHT'],
+    isActive: true
+  },
+  {
+    name: 'Roads & Infrastructure Department',
+    code: 'ROADS_INFRASTRUCTURE',
+    issueTypes: ['POTHOLE'],
+    isActive: true
+  }
+];
+
+// Seed & sync default departments (runs after DB is connected)
 const seedDepartments = async () => {
   try {
-    const count = await Department.countDocuments();
-    if (count === 0) {
-      await Department.create([
-        {
-          name: 'Sewerage Municipal',
-          code: 'SEWERAGE_MUNICIPAL',
-          issueTypes: ['OPEN_MANHOLE'],
-          isActive: true
-        },
-        {
-          name: 'Road Maintenance',
-          code: 'ROAD_MAINTENANCE',
-          issueTypes: ['POTHOLE'],
-          isActive: true
-        },
-        {
-          name: 'Waste Management',
-          code: 'WASTE_MANAGEMENT',
-          issueTypes: ['GARBAGE_DUMP'],
-          isActive: true
-        },
-        {
-          name: 'Street Lighting',
-          code: 'STREET_LIGHTING',
-          issueTypes: ['BROKEN_STREET_LIGHT'],
-          isActive: true
+    // Migration mapping for any legacy seeded department codes
+    const legacyCodeMap = {
+      'SEWERAGE_MUNICIPAL': 'MANHOLE_DRAINAGE',
+      'WASTE_MANAGEMENT': 'SOLID_WASTE',
+      'ROAD_MAINTENANCE': 'ROADS_INFRASTRUCTURE'
+    };
+
+    for (const [oldCode, newCode] of Object.entries(legacyCodeMap)) {
+      const oldDept = await Department.findOne({ code: oldCode });
+      if (oldDept) {
+        const targetConfig = REQUIRED_DEPARTMENTS.find(d => d.code === newCode);
+        if (targetConfig) {
+          oldDept.name = targetConfig.name;
+          oldDept.code = targetConfig.code;
+          oldDept.issueTypes = targetConfig.issueTypes;
+          oldDept.isActive = true;
+          await oldDept.save();
         }
-      ]);
-      console.log('Seeded default departments successfully.');
+      }
     }
+
+    // Upsert all required departments idempotently to prevent duplicates
+    for (const dept of REQUIRED_DEPARTMENTS) {
+      await Department.findOneAndUpdate(
+        { code: dept.code },
+        { $set: dept },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+    }
+    console.log('Departments verified and synchronized successfully.');
   } catch (error) {
     console.error('Error seeding departments:', error);
   }
@@ -69,6 +98,11 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use((req, res, next) => {
+  console.log(`[REQUEST] ${req.method} ${req.originalUrl}`);
+  console.log(`[MONGO STATE] ${require('mongoose').connection.readyState}`);
+  next();
+});
 
 // Serve Uploads folder statically
 const uploadsPath = path.join(__dirname, '../uploads');
@@ -90,6 +124,7 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/complaints', complaintRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/departments', departmentRoutes);
 
 // Catch 404 Route Errors
 app.use((req, res, next) => {

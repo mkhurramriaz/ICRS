@@ -1,6 +1,7 @@
 const Complaint = require('../Models/Complaint');
 const Department = require('../Models/Department');
 const { routeComplaint } = require('../Services/routingService');
+const { detectDuplicate } = require('../Services/duplicateDetectionService');
 const { logAction } = require('../Services/auditService');
 const { validationResult } = require('express-validator');
 
@@ -52,7 +53,12 @@ const serializeComplaint = (complaint) => {
     // Admin & Staff Notes
     staffNotes: complaint.staffNotes || '',
     priority: complaint.priority || null,
-    departmentId: complaint.departmentId ? complaint.departmentId.toString() : null
+    departmentId: complaint.departmentId ? complaint.departmentId.toString() : null,
+
+    // Duplicate detection info
+    isDuplicate: Boolean(complaint.duplicate && complaint.duplicate.isDuplicate),
+    masterComplaintId: complaint.duplicate && complaint.duplicate.masterComplaintId ? complaint.duplicate.masterComplaintId.toString() : null,
+    distanceMeters: complaint.duplicate && typeof complaint.duplicate.distanceMeters === 'number' ? complaint.duplicate.distanceMeters : null
   };
 };
 
@@ -113,12 +119,18 @@ const createComplaint = async (req, res, next) => {
     // Auto-resolve department using routingService
     const resolvedDeptId = await routeComplaint(issueType);
 
+    // Check for nearby duplicate complaints of the same issue type (default 100m radius)
+    const duplicateResult = await detectDuplicate({
+      issueType,
+      coordinates: [lngVal, latVal]
+    });
+
     // Save image properties (Multer files relative URL)
     const relativeUrl = `/uploads/${req.file.filename}`;
     // Construct full URL dynamically
     const fullImageUrl = `${req.protocol}://${req.get('host')}${relativeUrl}`;
 
-    // Create the complaint
+    // Create the complaint (preserved with duplicate flag if nearby match found)
     const complaint = new Complaint({
       userId: req.user._id,
       title,
@@ -144,10 +156,10 @@ const createComplaint = async (req, res, next) => {
         analyzedAt: null
       },
       duplicate: {
-        isDuplicate: null,
-        masterComplaintId: null,
-        similarityScore: null,
-        distanceMeters: null
+        isDuplicate: duplicateResult.isDuplicate,
+        masterComplaintId: duplicateResult.masterComplaintId,
+        similarityScore: duplicateResult.isDuplicate ? 0.95 : null,
+        distanceMeters: duplicateResult.distanceMeters
       }
     });
 
@@ -159,12 +171,23 @@ const createComplaint = async (req, res, next) => {
       performedBy: req.user._id,
       action: 'CREATE',
       newValue: complaint.status,
-      notes: 'Complaint submitted by citizen.'
+      notes: duplicateResult.isDuplicate
+        ? `Complaint submitted by citizen (flagged as nearby duplicate of ${duplicateResult.masterComplaintId}).`
+        : 'Complaint submitted by citizen.'
     });
 
     return res.status(201).json({
       success: true,
-      message: 'Complaint submitted successfully',
+      message: duplicateResult.isDuplicate
+        ? `Complaint submitted. Note: A similar issue was already reported nearby (${duplicateResult.distanceMeters}m away).`
+        : 'Complaint submitted successfully',
+      isDuplicate: duplicateResult.isDuplicate,
+      duplicateInfo: duplicateResult.isDuplicate
+        ? {
+            masterComplaintId: duplicateResult.masterComplaintId.toString(),
+            distanceMeters: duplicateResult.distanceMeters
+          }
+        : null,
       data: serializeComplaint(complaint)
     });
   } catch (error) {
@@ -180,10 +203,14 @@ const getComplaints = async (req, res, next) => {
   try {
     const { status, issueType, category, priority } = req.query;
     const filter = {};
+    const roleUpper = (req.user.role || '').toUpperCase();
 
     // Citizens can only view their own reports
-    if (req.user.role === 'CITIZEN') {
+    if (roleUpper === 'CITIZEN') {
       filter.userId = req.user._id;
+    } else if (roleUpper === 'STAFF' && req.user.departmentId) {
+      // Staff members can only view reports assigned to their department
+      filter.departmentId = req.user.departmentId;
     }
 
     // Apply status filter
@@ -245,13 +272,26 @@ const getComplaintById = async (req, res, next) => {
       });
     }
 
-    // Citizen authorization verification
-    if (req.user.role === 'CITIZEN' && complaint.userId.toString() !== req.user._id.toString()) {
+    const roleUpper = (req.user.role || '').toUpperCase();
+
+    // Citizen authorization verification (can only view their own)
+    if (roleUpper === 'CITIZEN' && complaint.userId.toString() !== req.user._id.toString()) {
       return res.status(403).json({
         success: false,
         message: 'Access denied',
         errors: ['You are not authorized to view this complaint record.']
       });
+    }
+
+    // Staff authorization verification (can only view their department)
+    if (roleUpper === 'STAFF' && req.user.departmentId) {
+      if (!complaint.departmentId || complaint.departmentId.toString() !== req.user.departmentId.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied',
+          errors: ['You are not authorized to view complaints outside your department.']
+        });
+      }
     }
 
     return res.status(200).json({
@@ -293,6 +333,16 @@ const updateComplaintStatus = async (req, res, next) => {
       });
     }
 
+    const roleUpper = (req.user.role || '').toUpperCase();
+    if (roleUpper === 'STAFF' && req.user.departmentId) {
+      if (!complaint.departmentId || complaint.departmentId.toString() !== req.user.departmentId.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied: You can only update complaints assigned to your department.'
+        });
+      }
+    }
+
     const oldStatus = complaint.status;
     complaint.status = statusUpper;
     await complaint.save();
@@ -329,6 +379,16 @@ const updateComplaint = async (req, res, next) => {
         success: false,
         message: 'Complaint not found'
       });
+    }
+
+    const roleUpper = (req.user.role || '').toUpperCase();
+    if (roleUpper === 'STAFF' && req.user.departmentId) {
+      if (!complaint.departmentId || complaint.departmentId.toString() !== req.user.departmentId.toString()) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied: You can only update complaints assigned to your department.'
+        });
+      }
     }
 
     const { status, staffNotes, priority, departmentId } = req.body;

@@ -57,10 +57,10 @@ export const ComplaintService = {
       formData.append('description', complaintData.description);
       formData.append('category', complaintData.category);
       formData.append('location', complaintData.location);
-      
+
       // Send coordinate values
-      formData.append('latitude', complaintData.latitude || 33.6844);
-      formData.append('longitude', complaintData.longitude || 73.0479);
+      formData.append('latitude', complaintData.latitude);
+      formData.append('longitude', complaintData.longitude);
 
       if (complaintData.imageUrl) {
         if (complaintData.imageUrl.startsWith('data:image/')) {
@@ -98,4 +98,4 @@ export const ComplaintService = {
       throw new Error(errorMsg);
     }
   }
-};
+};  

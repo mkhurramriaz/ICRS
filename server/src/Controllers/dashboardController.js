@@ -18,8 +18,11 @@ const issueTypeToCategory = {
 const getDashboardSummary = async (req, res, next) => {
   try {
     const filter = {};
-    if (req.user.role === 'CITIZEN') {
+    const roleUpper = (req.user.role || '').toUpperCase();
+    if (roleUpper === 'CITIZEN') {
       filter.userId = req.user._id;
+    } else if (roleUpper === 'STAFF' && req.user.departmentId) {
+      filter.departmentId = req.user.departmentId;
     }
 
     // 1. Core Status Counts
